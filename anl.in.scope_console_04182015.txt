@@ -1,0 +1,137 @@
+
+> #anl.in.scope.R
+> setwd ("E:/R/cis_study")
+> #library(data.table)
+> library(dplyr)
+> 
+> load("xd2012.rdata")
+> 
+> ########################################################################################################################
+> 
+> 
+> # filter to find NMPR cohort
+> i.anl <-  filter(xd2012, 
++                  
++             (anldate>=anchor.date & mrjdate>=anchor.date & anldate>=mrjdate)|
++              (anldate>=anchor.date & is.na(mrjdate))
++ )
+> 
+> # find the NMPR cohort size
+> df1 <- as.matrix(sum(i.anl$anlflag))
+> rownames(df1) <- "NSDUH 2012- NMPR cohort"
+> df1
+                        [,1]
+NSDUH 2012- NMPR cohort 3609
+> 
+> # calculate time to heroin initiation or censoring
+>  anl.in.scope.2012 <- mutate(i.anl,  
++                               cond1 <-  herflag==1 & herdate >= anldate,
++                               cond2 <-  herflag==0,                            
++                               anl.tte = ifelse(cond1, (herdate-anldate)/365.25,  ifelse(cond2, (intdate-anldate)/365.25, NA) ),  
++                               anl.tte.cat = cut(anl.tte, breaks=c(0,1,2,3,4,5,6),include.lowest=TRUE, stringsAsFactors=FALSE), 
++                               censor = ifelse(cond2, 1, 0),
++                               cond3 <-  herflag==1 & herdate < anldate
++                              
++                              )
+> 
+> paste ("NMPR cohort size", nrow(i.anl), sep=" = ")
+[1] "NMPR cohort size = 3609"
+> paste ("NMPR cohort members who intiated heroin on/after NMPR initiation during the study period", sum(anl.in.scope.2012$cond1), sep=" = ")   
+[1] "NMPR cohort members who intiated heroin on/after NMPR initiation during the study period = 68"
+> paste ("NMPR cohort members who were censored", sum(anl.in.scope.2012$cond2), sep=" = ")
+[1] "NMPR cohort members who were censored = 3519"
+> paste ("NMPR cohort members who intiated heroin before NMPR initiation during the study period", sum(anl.in.scope.2012$cond3), sep=" = ") 
+[1] "NMPR cohort members who intiated heroin before NMPR initiation during the study period = 22"
+> 
+> range(anl.in.scope.2012$anldate[complete.cases(anl.in.scope.2012$anldate) & is.finite(anl.in.scope.2012$anldate)]) 
+[1] "2006-03-24" "2012-11-18"
+> range(anl.in.scope.2012$herdate[complete.cases(anl.in.scope.2012$herdate) & is.finite(anl.in.scope.2012$herdate)])
+[1] "2003-11-25" "2012-10-07"
+> range(anl.in.scope.2012$anl.tte[complete.cases(anl.in.scope.2012$anl.tte) & is.finite(anl.in.scope.2012$anl.tte)])
+[1] 0 6
+> 
+> 
+> 
+> 
+> # group by time-to-event and censoring
+> g.anl.in.scope.2012 <- group_by(anl.in.scope.2012, anl.tte.cat,  censor) 
+> 
+> # summarise by time-to-event and censoring
+> s.anl.in.scope.2012 <-  summarise(g.anl.in.scope.2012, anl.count= sum(anlflag), her.count=sum(herflag), anl.tte.sum = sum(anl.tte, digits=2 ))
+> 
+> 
+> # create a matrix with numerical columns of the data frame 
+> s.data2.df2x <- cbind(s.anl.in.scope.2012$censor,
++                       s.anl.in.scope.2012$anl.count,
++                       s.anl.in.scope.2012$her.count,
++                       s.anl.in.scope.2012$anl.tte.sum)
+> 
+> # convert the character column varriable (anl.tte.cat) into rownames
+> rownames(s.data2.df2x) <- as.matrix(s.anl.in.scope.2012$anl.tte.cat)
+> 
+> 
+> 
+> 
+> # do colSums from s.data2.df2
+> df3 <-  t(as.matrix(colSums(s.data2.df2x[,1:4, drop=FALSE], na.rm=TRUE)) )
+> rownames(df3) <- "NMPR Cohort Size (including herdate<andate), NSDUH 2012"
+> 
+> df4 <-  t(as.matrix(colSums(s.data2.df2x[1:12,1:4, drop=FALSE], na.rm=TRUE)) )
+> rownames(df4) <- "Effective NMPR Cohort Size (excl. NA), NSDUH 2012"
+> 
+>     
+> # row bind 
+> rb.data <- rbind(s.data2.df2x,df3, df4)  
+> colnames(rb.data) <- c("censored", "NMPR.cohort", "heroin.initiates", "tot.time.to.event")
+> options (width=132, digits=2)
+> rb.data
+                                                        censored NMPR.cohort heroin.initiates tot.time.to.event
+[0,1]                                                          0          24               24              13.7
+[0,1]                                                          1         932                0             404.1
+(1,2]                                                          0          25               25              38.8
+(1,2]                                                          1        1009                0            1487.2
+(2,3]                                                          0           6                6              16.9
+(2,3]                                                          1         699                0            1724.4
+(3,4]                                                          0          11               11              38.1
+(3,4]                                                          1         428                0            1487.0
+(4,5]                                                          0           1                1               6.1
+(4,5]                                                          1         297                0            1321.1
+(5,6]                                                          0           1                1               7.1
+(5,6]                                                          1         154                0             839.6
+<NA>                                                           0          22               22                NA
+NMPR Cohort Size (including herdate<andate), NSDUH 2012        6        3609               90            7383.9
+Effective NMPR Cohort Size (excl. NA), NSDUH 2012              6        3587               68            7383.9
+> 
+> 
+> ###########################################################################################################################
+> 
+> # filter to find NMPR cohort who initiated heroin (numerator)
+> i.anl.her <-  filter(i.anl, herflag==1 & herdate >= anldate) 
+>                              
+>                      
+> # calculate time to heroin initiation
+> anl.in.scope.her.2012 <- mutate(i.anl.her, 
++                                 
++                             anl.tte = as.numeric(intdate-anldate)/365.25,  
++                             anl.tte.cat = cut(anl.tte, breaks=c(0,1,2,3,4,5,6),include.lowest=TRUE, stringsAsFactors=FALSE),
++                                 
++                             anl.her.tte = as.numeric(herdate-anldate)/365.25,   
++                             anl.her.tte.cat = cut(anl.her.tte, breaks=c(0,1,2,3,4,5,6),include.lowest=TRUE, stringsAsFactors=FALSE)
++                           
++                                )
+> 
+> 
+> ytab <- table(anl.in.scope.her.2012$anl.tte.cat,anl.in.scope.her.2012$anl.her.tte.cat)
+> names(dimnames(ytab)) <- list("", "NSDUH 2012 - Distribution of heroin initiates in NMPR cohort by\n       Time from NMPR initiation to interview by time from NMPR to heroin initiation\n")
+> addmargins(ytab)
+       NSDUH 2012 - Distribution of heroin initiates in NMPR cohort by
+       Time from NMPR initiation to interview by time from NMPR to heroin initiation
+
+        [0,1] (1,2] (2,3] (3,4] (4,5] (5,6] Sum
+  [0,1]     4     0     0     0     0     0   4
+  (1,2]    11     5     0     0     0     0  16
+  (2,3]     3     9     1     0     0     0  13
+  (3,4]     5     6     3     4     0     0  18
+  (4,5]     1     4     2     4     1     0  12
+  (5,6]     0     1     0     3     0     1   5
+  Sum      24    25     6    11     1     1  68
